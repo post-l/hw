@@ -14,6 +14,8 @@ To learn about the configuration and the wiring go to the [rpi-rgb-led-matrix](h
 
 ![Life Gif](life.gif)
 
+Gopher gif from [`egonelbre/gophers`](https://github.com/egonelbre/gophers).
+
 ## Matrix Emulation
 
 As part of the library, a small Matrix emulator is provided. The emulator renders a virtual RGB matrix on a window in your desktop, without the need of a real RGB matrix connected to your computer.
