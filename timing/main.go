@@ -30,14 +30,31 @@ func main() {
 
 	vs := make([]int, 11)
 	for x := uint(0); x < 11; x++ {
-		vs[x] = 200 << uint(x)
+		vs[x] = 130 << uint(x)
+	}
+
+	vreal := []int{
+		53,    // 130
+		120,   // 260
+		250,   // 520
+		510,   // 1040
+		1000,  // 2080
+		2100,  // 4160
+		4800,  // 8320
+		10000, // 16640
+		30000, // 33280
+		60000, // 66560
+		37000, // 133120
 	}
 
 	vs2 := make([]int, len(vs))
 	size = 5000
 	for x, v := range vs {
+		if v <= 66560 {
+			continue
+		}
 		start := time.Now()
-		d := time.Duration(v / 2)
+		d := time.Duration(vreal[x])
 		for i := 0; i < size; i++ {
 			time.Sleep(d)
 		}
@@ -46,9 +63,12 @@ func main() {
 
 	vs3 := make([]int, len(vs))
 	for x, v := range vs {
+		if v > 66560 {
+			continue
+		}
 		start := time.Now()
 		for i := 0; i < size; i++ {
-			for j := v / 2; j != 0; j-- {
+			for j := vreal[x]; j != 0; j-- {
 			}
 		}
 		vs3[x] = int(time.Since(start)) / size
