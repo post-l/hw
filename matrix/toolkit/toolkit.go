@@ -2,6 +2,7 @@ package toolkit
 
 import (
 	"context"
+	"errors"
 	"image"
 	"image/draw"
 	"image/gif"
@@ -22,33 +23,32 @@ type Frame struct {
 	Delay time.Duration
 }
 
-// Matrix is an interface that represent any RGB matrix, very useful for testing
+// Matrix is an interface that represent any RGB matrix, very useful for testing.
 type Matrix interface {
 	draw.Image
-	io.Closer
 	Render()
 }
 
-// ToolKit is a convinient set of function to operate with a led of Matrix
+// ToolKit is a convinient set of function to operate with a led of Matrix.
 type ToolKit struct {
 	m Matrix
 }
 
-// NewToolKit returns a new ToolKit wrapping the given Matrix
+// New returns a new ToolKit wrapping the given Matrix.
 func New(m Matrix) *ToolKit {
 	return &ToolKit{
 		m: m,
 	}
 }
 
-// DrawImage draws the given image
+// DrawImage draws the given image.
 func (tk *ToolKit) DrawImage(img image.Image) {
 	draw.Draw(tk.m, tk.m.Bounds(), img, image.ZP, draw.Src)
 	tk.m.Render()
 }
 
 // PlayAnimation play the image during the delay returned by Next, until an err
-// is returned, if io.EOF is returned, PlayAnimation finish without an error
+// is returned, if io.EOF is returned, PlayAnimation finish without an error.
 func (tk *ToolKit) PlayAnimation(ctx context.Context, a Animation) error {
 	delay := a.Delay()
 	t := time.Now()
@@ -106,12 +106,18 @@ func (tk *ToolKit) PlayFrames(ctx context.Context, frames []Frame, loopCount int
 // PlayGIF draws a gif. It use the contained images and
 // delays and loops over it.
 func (tk *ToolKit) PlayGIF(ctx context.Context, gif *gif.GIF) error {
+	if len(gif.Image) == 0 {
+		return errors.New("no image in the gif")
+	}
 	frames := make([]Frame, len(gif.Image))
-	sz := tk.m.Bounds().Size()
-	w, h := sz.X, sz.Y
+	sz := tk.m.Bounds()
+	w, h := sz.Dx(), sz.Dy()
+	buf := image.NewRGBA(gif.Image[0].Bounds())
 	for i, img := range gif.Image {
+		b := img.Bounds()
+		draw.Draw(buf, b, img, b.Min, draw.Over)
 		frames[i] = Frame{
-			Image: imaging.Resize(img, w, h, imaging.Lanczos),
+			Image: imaging.Resize(buf, w, h, imaging.Lanczos),
 			Delay: time.Duration(gif.Delay[i]*10) * time.Millisecond,
 		}
 	}
