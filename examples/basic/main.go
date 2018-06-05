@@ -36,10 +36,25 @@ func main() {
 
 func run(m toolkit.Matrix) {
 	bounds := m.Bounds()
+	c := color.RGBA{0, 0, 255, 255}
+	thirdX := (bounds.Min.X + bounds.Max.X) / 3
 	for x := bounds.Min.X; x < bounds.Max.X; x++ {
+		t := time.Now()
+		if x == thirdX-1 {
+			c = color.RGBA{255, 255, 255, 255}
+		} else if x == thirdX*2 {
+			c = color.RGBA{255, 0, 0, 255}
+		}
 		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-			m.Set(x, y, color.RGBA{255, 0, 0, 255})
-			m.Render()
+			m.Set(x, y, c)
+		}
+		m.Render()
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			m.Set(x, y, c)
+		}
+		m.Render()
+		if d := 150*time.Millisecond - time.Since(t); d > 0 {
+			time.Sleep(d)
 		}
 	}
 }
