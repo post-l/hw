@@ -3,8 +3,12 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"image/gif"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 
 	"github.com/post-l/hw/board/tinkerboard"
 	"github.com/post-l/hw/matrix"
@@ -20,12 +24,7 @@ var (
 func main() {
 	flag.Parse()
 
-	f, err := os.Open(*img)
-	fatal(err)
-	gif, err := gif.DecodeAll(f)
-	fatal(err)
-	f.Close()
-
+	gif := getGIF(*img)
 	if *emFlag {
 		m := emulator.NewEmulator(&matrix.DefaultHardwareConfig)
 		go func() {
@@ -39,6 +38,28 @@ func main() {
 	m := matrix.New(b, &matrix.DefaultHardwareConfig)
 	defer m.Close()
 	run(gif, m)
+}
+
+func getGIF(p string) *gif.GIF {
+	var r io.Reader
+	if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
+		resp, err := http.Get(p)
+		fatal(err)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			err = fmt.Errorf("invalid http status code %d", resp.StatusCode)
+			fatal(err)
+		}
+		r = resp.Body
+	} else {
+		f, err := os.Open(p)
+		fatal(err)
+		defer f.Close()
+		r = f
+	}
+	gif, err := gif.DecodeAll(r)
+	fatal(err)
+	return gif
 }
 
 func run(gif *gif.GIF, m toolkit.Matrix) {
