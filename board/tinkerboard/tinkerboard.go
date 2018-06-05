@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sort"
 	"syscall"
 	"unsafe"
 
@@ -76,113 +77,9 @@ func New() (*TinkerBoard, error) {
 	}
 	tb.cru = mapToUInt32Slice(tb.cruMap)
 
+	tb.gpioClkEnable()
+
 	return tb, nil
-}
-
-func (tb *TinkerBoard) SetPinMode(pin int, mode board.PinMode) {
-	bank, bankPin := gpioToBank(pin)
-	cc := tb.gpioClkDisable(bank)
-
-	tb.setGPIOPinMode(pin)
-	switch mode {
-	case board.Input:
-		tb.gpio[bank][GPIO_SWPORTA_DDR_OFFSET/4] &= ^(1 << bankPin)
-	case board.Output:
-		tb.gpio[bank][GPIO_SWPORTA_DDR_OFFSET/4] |= (1 << bankPin)
-	}
-
-	tb.gpioClkEnable(cc)
-}
-
-func (tb *TinkerBoard) DigitalRead(pin int) bool {
-	bank, bankPin := gpioToBank(pin)
-	cc := tb.gpioClkDisable(bank)
-
-	r := tb.gpio[bank][GPIO_EXT_PORTA_OFFSET/4]
-	v := ((r & (1 << bankPin)) >> bankPin) != 0
-
-	tb.gpioClkEnable(cc)
-	return v
-}
-
-func (tb *TinkerBoard) DigitalWrite(pin int, v bool) {
-	bank, bankPin := gpioToBank(pin)
-	cc := tb.gpioClkDisable(bank)
-
-	if v {
-		tb.gpio[bank][GPIO_SWPORTA_DR_OFFSET/4] |= (1 << bankPin)
-	} else {
-		tb.gpio[bank][GPIO_SWPORTA_DR_OFFSET/4] &= ^(1 << bankPin)
-	}
-
-	tb.gpioClkEnable(cc)
-}
-
-func (tb *TinkerBoard) DigitalWrites(pvs []board.PinValue) {
-	banks := make([]uint32, gpioBankLen)
-	maskBanks := make([]uint32, gpioBankLen)
-	cruv := uint32(0)
-	for _, pv := range pvs {
-		pin := pv.Pin
-		v := pv.Value
-		bank, bankPin := gpioToBank(pin)
-		bitPin := uint32(1 << bankPin)
-		maskBanks[bank] |= bitPin
-		if v {
-			banks[bank] |= bitPin
-		}
-		if bank != 0 {
-			cruv |= 1 << (16 + uint32(bank))
-		}
-	}
-	if mask := maskBanks[0]; mask != 0 {
-		writeBit := uint32(4)
-		regOffset := CRU_CLKGATE17_CON / 4
-		v := uint32(1 << (16 + writeBit))
-		tb.cru[regOffset] = v
-		tb.writeMaskedBits(0, banks[0], mask)
-		tb.cru[regOffset] = v
-	}
-	if cruv != 0 {
-		tb.cru[CRU_CLKGATE14_CON/4] = cruv
-		for bank := 1; bank < gpioBankLen; bank++ {
-			mask := maskBanks[bank]
-			if mask == 0 {
-				continue
-			}
-			tb.writeMaskedBits(uint32(bank), banks[bank], mask)
-		}
-		tb.cru[CRU_CLKGATE14_CON/4] = cruv
-	}
-}
-
-func (tb *TinkerBoard) writeMaskedBits(bank, value, mask uint32) {
-	tb.gpio[bank][GPIO_SWPORTA_DR_OFFSET/4] = tb.gpio[bank][GPIO_SWPORTA_DR_OFFSET/4] & ^(^value&mask) | value
-}
-
-type clkCtrl struct {
-	regOffset int
-	v         uint32
-}
-
-func (tb *TinkerBoard) gpioClkDisable(bank uint32) clkCtrl {
-	var cc clkCtrl
-	writeBit := bank
-	regOffset := CRU_CLKGATE14_CON / 4
-	if bank == 0 {
-		writeBit = 4
-		cc.regOffset = CRU_CLKGATE17_CON / 4
-	}
-	v := uint32(1 << (16 + writeBit))
-	tb.cru[regOffset] = v
-	return clkCtrl{
-		regOffset: regOffset,
-		v:         v,
-	}
-}
-
-func (tb *TinkerBoard) gpioClkEnable(ctrl clkCtrl) {
-	tb.cru[ctrl.regOffset] = ctrl.v
 }
 
 func (tb *TinkerBoard) Close() error {
@@ -202,18 +99,72 @@ func (tb *TinkerBoard) Close() error {
 	return nil
 }
 
-func gpioToBank(gpio int) (uint32, uint32) {
-	if gpio < 24 {
-		return 0, uint32(gpio)
+func (tb *TinkerBoard) SetPinMode(pin int, mode board.PinMode) {
+	bank, bankPin := gpioToBank(pin)
+	tb.setGPIOPinMode(pin)
+	switch mode {
+	case board.Input:
+		tb.gpio[bank][GPIO_SWPORTA_DDR_OFFSET/4] &= ^(1 << bankPin)
+	case board.Output:
+		tb.gpio[bank][GPIO_SWPORTA_DDR_OFFSET/4] |= (1 << bankPin)
 	}
-	return uint32(((gpio - 24) / 32) + 1), uint32((gpio - 24) % 32)
 }
 
-func mapToUInt32Slice(m []byte) []uint32 {
-	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
-	h.Len /= 4
-	h.Cap /= 4
-	return *(*[]uint32)(unsafe.Pointer(h))
+func (tb *TinkerBoard) DigitalRead(pin int) bool {
+	bank, bankPin := gpioToBank(pin)
+	r := tb.gpio[bank][GPIO_EXT_PORTA_OFFSET/4]
+	v := ((r & (1 << bankPin)) >> bankPin) != 0
+	return v
+}
+
+func (tb *TinkerBoard) DigitalWrite(pin int, v bool) {
+	bank, bankPin := gpioToBank(pin)
+	if v {
+		tb.gpio[bank][GPIO_SWPORTA_DR_OFFSET/4] |= (1 << bankPin)
+	} else {
+		tb.gpio[bank][GPIO_SWPORTA_DR_OFFSET/4] &= ^(1 << bankPin)
+	}
+}
+
+func (tb *TinkerBoard) DigitalWrites(pvs []board.PinValue) {
+	var banks [gpioBankLen]struct {
+		v    uint32
+		mask uint32
+	}
+	for _, pv := range pvs {
+		pin := pv.Pin
+		v := pv.Value
+		bank, bankPin := gpioToBank(pin)
+		bitPin := uint32(1 << bankPin)
+		banks[bank].mask |= bitPin
+		if v {
+			banks[bank].v |= bitPin
+		}
+	}
+	for bank := 0; bank < gpioBankLen; bank++ {
+		if banks[bank].mask == 0 {
+			continue
+		}
+		tb.writeMaskedBits(uint32(bank), banks[bank].v, banks[bank].mask)
+	}
+}
+
+func (tb *TinkerBoard) PerfWrites(bw *BankWriter) {
+	for _, bank := range bw.banks {
+		d := bw.data[bank]
+		tb.writeMaskedBits(uint32(bank), d.value, d.mask)
+	}
+}
+
+func (tb *TinkerBoard) gpioClkEnable() {
+	tb.cru[CRU_CLKGATE17_CON/4] = (tb.cru[CRU_CLKGATE17_CON/4] & (^uint32(1 << 4))) | (1 << (16 + 4))
+	for bank := uint32(1); bank < gpioBankLen; bank++ {
+		tb.cru[CRU_CLKGATE14_CON/4] = (tb.cru[CRU_CLKGATE14_CON/4] & (^uint32(1 << bank))) | 1<<(16+bank)
+	}
+}
+
+func (tb *TinkerBoard) writeMaskedBits(bank, value, mask uint32) {
+	tb.gpio[bank][GPIO_SWPORTA_DR_OFFSET/4] = tb.gpio[bank][GPIO_SWPORTA_DR_OFFSET/4] & ^(^value&mask) | value
 }
 
 func (tb *TinkerBoard) setGPIOPinMode(pin int) {
@@ -252,5 +203,65 @@ func (tb *TinkerBoard) setGPIOPinMode(pin int) {
 	//GPIO8B
 	case GPIO8_B0, GPIO8_B1:
 		tb.grf[GRF_GPIO8B_IOMUX/4] = (tb.grf[GRF_GPIO8B_IOMUX/4] | (0x03 << ((p%8)*2 + 16))) & (^(0x03 << ((p % 8) * 2)))
+	}
+}
+
+func gpioToBank(gpio int) (uint32, uint32) {
+	if gpio < 24 {
+		return 0, uint32(gpio)
+	}
+	return uint32(((gpio - 24) / 32) + 1), uint32((gpio - 24) % 32)
+}
+
+func mapToUInt32Slice(m []byte) []uint32 {
+	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
+	h.Len /= 4
+	h.Cap /= 4
+	return *(*[]uint32)(unsafe.Pointer(h))
+}
+
+type BankWriter struct {
+	offsets []bankWriterOffset
+	data    [gpioBankLen]struct {
+		mask  uint32
+		value uint32
+	}
+	banks []int
+}
+
+type bankWriterOffset struct {
+	bank   uint32
+	bitPin uint32
+}
+
+func NewBankWriter(pins []int) *BankWriter {
+	bankSet := make(map[uint32]bool)
+	bw := &BankWriter{
+		offsets: make([]bankWriterOffset, len(pins)),
+	}
+	for i, pin := range pins {
+		bank, bankPin := gpioToBank(pin)
+		bitPin := uint32(1 << bankPin)
+		bw.offsets[i].bank = bank
+		bw.offsets[i].bitPin = bitPin
+		bw.data[bank].mask |= bitPin
+		bankSet[bank] = true
+	}
+	bw.banks = make([]int, 0, len(bankSet))
+	for bank := range bankSet {
+		bw.banks = append(bw.banks, int(bank))
+	}
+	sort.Ints(bw.banks)
+	return bw
+}
+
+func (bw *BankWriter) Set(val uint32) {
+	for i, offset := range bw.offsets {
+		mask := uint32(1 << uint32(i))
+		if val&mask != 0 {
+			bw.data[offset.bank].value |= offset.bitPin
+		} else {
+			bw.data[offset.bank].value &= ^offset.bitPin
+		}
 	}
 }
