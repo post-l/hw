@@ -42,7 +42,7 @@ func NewEmulator(hc *matrix.HardwareConfig) *Emulator {
 
 		leds: make([]color.RGBA, hc.Cols*hc.Rows),
 	}
-	pixelPitch := 12
+	pixelPitch := 6
 	e.updatePixelPitchForGutter(pixelPitch / e.PixelPitchToGutterRatio)
 	return e
 }
@@ -119,6 +119,9 @@ func (e *Emulator) mainWindowLoop(s screen.Screen) {
 				close(e.readyCh)
 			}
 		case size.Event:
+			if evn.WidthPx == 0 && evn.HeightPx == 0 {
+				os.Exit(42)
+			}
 			e.sz = evn
 		case error:
 			fmt.Println("render:", err)
