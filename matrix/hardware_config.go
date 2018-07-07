@@ -11,7 +11,7 @@ const (
 var DefaultHardwareConfig = HardwareConfig{
 	Rows:            64,
 	Cols:            64,
-	PWMBits:         4,
+	PWMBits:         5,
 	Brightness:      100,
 	ScanMode:        Interlaced,
 	Mapping:         DefaultHardwareMapping,

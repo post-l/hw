@@ -1,66 +1,21 @@
 // An implementation of Conway's Game of Life.
-package main
+package life
 
 import (
-	"context"
-	"flag"
 	"image"
 	"image/color"
-	"log"
 	"math"
 	"math/rand"
 	"time"
-
-	"github.com/post-l/hw/board/tinkerboard"
-	"github.com/post-l/hw/matrix"
-	"github.com/post-l/hw/matrix/emulator"
-	"github.com/post-l/hw/matrix/toolkit"
 )
-
-var (
-	emFlag = flag.Bool("emulator", false, "use emulator")
-)
-
-func main() {
-	flag.Parse()
-	rand.Seed(time.Now().UnixNano())
-
-	if *emFlag {
-		m := emulator.NewEmulator(&matrix.DefaultHardwareConfig)
-		go func() {
-			<-m.Ready()
-			run(m)
-		}()
-		m.Init()
-	}
-	b, err := tinkerboard.New()
-	fatal(err)
-	m := matrix.New(b, &matrix.DefaultHardwareConfig)
-	defer m.Close()
-	run(m)
-}
-
-func run(m toolkit.Matrix) {
-	tk := toolkit.New(m)
-	ctx := context.Background()
-	a := NewAnimation(m.Bounds())
-	tk.PlayAnimation(ctx, a)
-}
-
-func fatal(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
 
 type Animation struct {
 	l *Life
 }
 
-func NewAnimation(r image.Rectangle) *Animation {
-	sz := r.Size()
+func NewAnimation(sz image.Point) *Animation {
 	return &Animation{
-		l: NewLife(sz.X, sz.Y),
+		l: New(sz.X, sz.Y),
 	}
 }
 
@@ -159,8 +114,8 @@ type Life struct {
 	w, h int
 }
 
-// NewLife returns a new Life game state with a random initial state.
-func NewLife(w, h int) *Life {
+// New returns a new Life game state with a random initial state.
+func New(w, h int) *Life {
 	a := NewField(w, h)
 	c := color.RGBA{A: 255, R: 231, G: 76, B: 60}
 	nbCells := w * h / 4

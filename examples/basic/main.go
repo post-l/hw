@@ -1,40 +1,18 @@
 package main
 
 import (
-	"flag"
 	"image/color"
 	"time"
 
-	"github.com/post-l/hw/board/tinkerboard"
-	"github.com/post-l/hw/matrix"
-	"github.com/post-l/hw/matrix/emulator"
+	"github.com/post-l/hw/examples"
 	"github.com/post-l/hw/matrix/toolkit"
 )
 
-var (
-	emFlag = flag.Bool("emulator", false, "use emulator")
-)
-
 func main() {
-	flag.Parse()
-
-	if *emFlag {
-		m := emulator.NewEmulator(&matrix.DefaultHardwareConfig)
-		go func() {
-			<-m.Ready()
-			run(m)
-		}()
-		m.Init()
-	}
-	b, err := tinkerboard.New()
-	fatal(err)
-	m := matrix.New(b, &matrix.DefaultHardwareConfig)
-	defer m.Close()
-	run(m)
-	time.Sleep(10 * time.Second)
+	examples.Main(run)
 }
 
-func run(m toolkit.Matrix) {
+func run(m toolkit.Matrix) error {
 	bounds := m.Bounds()
 	c := color.RGBA{0, 0, 255, 255}
 	thirdX := (bounds.Min.X + bounds.Max.X) / 3
@@ -57,10 +35,6 @@ func run(m toolkit.Matrix) {
 			time.Sleep(d)
 		}
 	}
-}
-
-func fatal(err error) {
-	if err != nil {
-		panic(err)
-	}
+	time.Sleep(10 * time.Second)
+	return nil
 }
