@@ -61,6 +61,7 @@ func (e *Emulator) Run() {
 			panic(err)
 		}
 		e.w = w
+		firstRender := true
 		for {
 			evn := w.NextEvent()
 			switch evn := evn.(type) {
@@ -75,6 +76,10 @@ func (e *Emulator) Run() {
 					e.Close()
 				}
 				e.sz = evn
+				if firstRender {
+					e.Render()
+					firstRender = false
+				}
 			case error:
 				fmt.Println("render:", err)
 			}

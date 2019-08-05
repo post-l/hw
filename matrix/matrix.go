@@ -89,7 +89,7 @@ func New(b board.Board, hc *HardwareConfig) *Matrix {
 		ctx:    ctx,
 		cancel: cancel,
 	}
-	m.createLuminanceCIETable(hc.Brightness)
+	m.createLuminanceCIETable(hc.Brightness, hc.PWMBits)
 	go m.run()
 	return m
 }
@@ -139,6 +139,18 @@ func (m *Matrix) Set(x, y int, c color.Color) {
 	}
 }
 
+func (m *Matrix) PWMBits() int { return pwmBitsLen - m.pwmStartBit }
+
+// SetPWMBits sets PWM bits used for output. Default is 11, but if you only deal with
+// limited comic-colors, 1 might be sufficient. Lower require less CPU and
+// increases refresh-rate.
+func (m *Matrix) SetPWMBits(pwmBits int) {
+	m.pwmStartBit = pwmBitsLen - pwmBits
+	m.createLuminanceCIETable(m.hc.Brightness, pwmBits)
+}
+
+// Render renders the back buffer. It waits to the next VSync and
+// swaps the active buffer with the back buffer one.
 func (m *Matrix) Render() {
 	m.swapc <- struct{}{}
 }
@@ -211,8 +223,8 @@ func (m *Matrix) render() {
 	}
 }
 
-func (m *Matrix) createLuminanceCIETable(brightness int) {
-	outFactor := (1 << uint(m.hc.PWMBits)) - 1
+func (m *Matrix) createLuminanceCIETable(brightness, pwmBits int) {
+	outFactor := (1 << uint(pwmBits)) - 1
 	for c := range m.cie {
 		m.cie[c] = uint16(float64(outFactor) * luminanceCIE1931(uint8(c), uint8(brightness)))
 	}

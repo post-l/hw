@@ -33,27 +33,20 @@ func run(m toolkit.Matrix) error {
 	for {
 		i := rand.Intn(len(res.Data))
 		item := res.Data[i]
-		if err := playGIFFromURL(tk, item.Images.FixedWidth.URL); err != nil {
+		gif, err := getGIF(item.Images.FixedWidth.URL)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not get gif: %v\n", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := tk.PlayGIF(ctx, gif); err != nil && err != context.DeadlineExceeded {
 			fmt.Fprintf(os.Stderr, "could not play gif: %v\n", err)
 		}
+		cancel()
 	}
 }
 
-func playGIFFromURL(tk *toolkit.ToolKit, urlStr string) error {
-	gif, err := getGIF(urlStr)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := tk.PlayGIF(ctx, gif); err != nil && err != context.DeadlineExceeded {
-		return err
-	}
-	return nil
-}
-
-func getGIF(p string) (*gif.GIF, error) {
-	resp, err := http.Get(p)
+func getGIF(url string) (*gif.GIF, error) {
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
